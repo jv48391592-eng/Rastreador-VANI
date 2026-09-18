@@ -8,7 +8,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 # --- CONFIGURAÇÕES ---
-TELEGRAM_TOKEN = "8766102244:AAE70LSpBADzM7xsFnStP_7Z7oUYklOAMaQ"
+TELEGRAM_TOKEN = "8766102244:AAEOKgIYBMJ0x1NAJoH9zaai1CPg4sqjLqk"
 ID_MOTORISTA = None
 
 DESTINO_LAT = -6.4583
