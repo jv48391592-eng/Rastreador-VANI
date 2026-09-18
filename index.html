@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Painel do Motorista - Rota UFRN</title>
+    <style>
+        :root {
+            --bg-color: #0d0d0d;
+            --card-bg: linear-gradient(145deg, #181818, #111111);
+            --orange-metallic: linear-gradient(135deg, #d35400 0%, #e67e22 50%, #b33900 100%);
+            --orange-accent: #d35400;
+            --text-main: #f0f0f0;
+            --text-muted: #888888;
+            --border-color: #262626;
+            --status-off: #2a2a2a;
+            --status-on: #003811;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            padding: 28px;
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), inset 0 1px 1px rgba(255, 255, 255, 0.05);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        h2 { 
+            color: #f39c12; 
+            margin: 0 0 5px 0;
+            font-size: 22px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .sub-title { 
+            color: var(--text-muted); 
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+
+        .btn-start { 
+            background: var(--orange-metallic); 
+            color: #ffffff;
+            border: 1px solid #e67e22;
+        }
+
+        .btn-start:active {
+            transform: scale(0.98);
+        }
+
+        .btn-stop { 
+            background: linear-gradient(135deg, #7f8c8d, #34495e); 
+            color: white; 
+            display: none; 
+            border: 1px solid #7f8c8d;
+        }
+        
+        .info-box {
+            background: #141414;
+            border: 1px solid #222;
+            padding: 18px;
+            border-radius: 12px;
+            margin-top: 22px;
+            font-size: 15px;
+            text-align: left;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #1f1f1f;
+            padding-bottom: 6px;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .val-highlight {
+            color: #e67e22;
+            font-weight: bold;
+        }
+
+        .status {
+            font-weight: 600;
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .status-off { background: var(--status-off); color: #888; border: 1px solid #333; }
+        .status-on { background: var(--status-on); color: #2ecc71; border: 1px solid #2ecc71; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>PAINEL DO MOTORISTA</h2>
+        <p class="sub-title">Rota: Jucurutu ➔ UFRN Caicó</p>
+        
+        <div>
+            <span id="status" class="status status-off">Desconectado</span>
+        </div>
+
+        <button id="btnStart" class="btn btn-start" onclick="iniciarRastreamento()">▶ Iniciar Viagem</button>
+        <button id="btnStop" class="btn btn-stop" onclick="pararRastreamento()">⏹ Parar Viagem</button>
+
+        <div class="info-box">
+            <div class="info-row">
+                <span>Velocidade:</span>
+                <span class="val-highlight"><span id="velocidade">0</span> km/h</span>
+            </div>
+            <div class="info-row">
+                <span>Latitude:</span>
+                <span id="lat">--</span>
+            </div>
+            <div class="info-row">
+                <span>Longitude:</span>
+                <span id="lon">--</span>
+            </div>
+            <div style="margin-top: 10px; text-align: center;">
+                <small style="color: var(--text-muted); font-size: 11px;">Último envio: <span id="hora">--</span></small>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let watchId = null;
+        // Altere para o endereço do seu servidor executando o backend Python
+        const SERVIDOR_URL = "http://localhost:8000/atualizar_localizacao"; 
+
+        function iniciarRastreamento() {
+            if (!("geolocation" in navigator)) {
+                alert("Geolocalização não é suportada por este dispositivo.");
+                return;
+            }
+
+            const options = {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: 10000
+            };
+
+            watchId = navigator.geolocation.watchPosition(sucessoGPS, erroGPS, options);
+
+            document.getElementById("status").innerText = "Transmitindo GPS...";
+            document.getElementById("status").className = "status status-on";
+            document.getElementById("btnStart").style.display = "none";
+            document.getElementById("btnStop").style.display = "block";
+        }
+
+        function pararRastreamento() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+
+            document.getElementById("status").innerText = "Desconectado";
+            document.getElementById("status").className = "status status-off";
+            document.getElementById("btnStart").style.display = "block";
+            document.getElementById("btnStop").style.display = "none";
+        }
+
+        function sucessoGPS(position) {
+            const lat = position.coords.latitude;
+            const lon = position.coords.longitude;
+            
+            let velocidadeKmh = 0;
+            if (position.coords.speed !== null && position.coords.speed > 0) {
+                velocidadeKmh = Math.round(position.coords.speed * 3.6);
+            }
+
+            document.getElementById("lat").innerText = lat.toFixed(5);
+            document.getElementById("lon").innerText = lon.toFixed(5);
+            document.getElementById("velocidade").innerText = velocidadeKmh;
+            document.getElementById("hora").innerText = new Date().toLocaleTimeString();
+
+            enviarParaServidor(lat, lon, velocidadeKmh);
+        }
+
+        function erroGPS(err) {
+            console.warn(`ERRO (${err.code}): ${err.message}`);
+            document.getElementById("status").innerText = "Erro no GPS";
+        }
+
+        async function enviarParaServidor(lat, lon, velocidade) {
+            try {
+                await fetch(SERVIDOR_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ lat, lon, velocidade })
+                });
+            } catch (error) {
+                console.error("Erro no envio:", error);
+            }
+        }
+    </script>
+</body>
+</html>
