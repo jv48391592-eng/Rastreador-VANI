@@ -32,62 +32,10 @@ def calcular_distancia_km(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
+# Constroi o aplicativo do Telegram
 telegram_app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
-# Gerenciador de ciclo de vida moderno (substitui on_event)
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await telegram_app.initialize()
-    await telegram_app.start()
-    await telegram_app.updater.start_polling()
-    print("🤖 Bot do Telegram pronto para uso!")
-    yield
-    await telegram_app.updater.stop()
-    await telegram_app.stop()
-
-app = FastAPI(lifespan=lifespan)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-class LocationData(BaseModel):
-    lat: float
-    lon: float
-    velocidade: float
-
-@app.post("/atualizar_localizacao")
-async def atualizar_localizacao(data: LocationData):
-    dados_bus["lat"] = data.lat
-    dados_bus["lon"] = data.lon
-    dados_bus["velocidade_kmh"] = data.velocidade
-    
-    distancia_km = calcular_distancia_km(data.lat, data.lon, DESTINO_LAT, DESTINO_LON)
-    
-    if data.velocidade > 5:
-        tempo_minutos = (distancia_km / data.velocidade) * 60
-        dados_bus["tempo_restante_min"] = round(tempo_minutos, 1)
-        
-        if tempo_minutos <= 5 and not dados_bus["notificado_5min"]:
-            dados_bus["notificado_5min"] = True
-            for chat_id in alunos_inscritos:
-                try:
-                    await telegram_app.bot.send_message(
-                        chat_id=chat_id,
-                        text="🚨 *ATENÇÃO*: O ônibus está a aproximadamente *5 minutos* da UFRN Caicó!",
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    print(f"Erro ao enviar para {chat_id}: {e}")
-    else:
-        dados_bus["tempo_restante_min"] = None
-
-    return {"status": "sucesso"}
-
+# Handlers dos comandos
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     alunos_inscritos.add(chat_id)
@@ -100,7 +48,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if dados_bus["lat"] is None:
-        await update.message.reply_text("🔴 O ônibus ainda não iniciou a viagem.")
+        await update.message.reply_text("🔴 O ônibus ainda não iniciou a viagem ou não enviou localização.")
         return
         
     vel = dados_bus["velocidade_kmh"]
@@ -141,9 +89,71 @@ async def cmd_quebrou(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✅ Alerta de emergência enviado a todos os alunos.")
 
+# Registra os handlers ANTES da inicialização no lifespan
 telegram_app.add_handler(CommandHandler("start", cmd_start))
 telegram_app.add_handler(CommandHandler("status", cmd_status))
 telegram_app.add_handler(CommandHandler("quebrou", cmd_quebrou))
+
+# Gerenciador de ciclo de vida do FastAPI
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Inicializa a aplicação e o polling do bot corretamente
+    await telegram_app.initialize()
+    await telegram_app.start()
+    await telegram_app.updater.start_polling()
+    print("🤖 Bot do Telegram pronto e escutando comandos!")
+    yield
+    if telegram_app.updater.running:
+        await telegram_app.updater.stop()
+    await telegram_app.stop()
+    await telegram_app.shutdown()
+
+app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class LocationData(BaseModel):
+    lat: float
+    lon: float
+    velocidade: float
+
+@app.get("/")
+def home():
+    return {"status": "online", "bot": "Rastreador VANI"}
+
+@app.post("/atualizar_localizacao")
+async def atualizar_localizacao(data: LocationData):
+    dados_bus["lat"] = data.lat
+    dados_bus["lon"] = data.lon
+    dados_bus["velocidade_kmh"] = data.velocidade
+    
+    distancia_km = calcular_distancia_km(data.lat, data.lon, DESTINO_LAT, DESTINO_LON)
+    
+    if data.velocidade > 5:
+        tempo_minutos = (distancia_km / data.velocidade) * 60
+        dados_bus["tempo_restante_min"] = round(tempo_minutos, 1)
+        
+        if tempo_minutos <= 5 and not dados_bus["notificado_5min"]:
+            dados_bus["notificado_5min"] = True
+            for chat_id in alunos_inscritos:
+                try:
+                    await telegram_app.bot.send_message(
+                        chat_id=chat_id,
+                        text="🚨 *ATENÇÃO*: O ônibus está a aproximadamente *5 minutos* da UFRN Caicó!",
+                        parse_mode="Markdown"
+                    )
+                except Exception as e:
+                    print(f"Erro ao enviar para {chat_id}: {e}")
+    else:
+        dados_bus["tempo_restante_min"] = None
+
+    return {"status": "sucesso", "distancia_km": round(distancia_km, 2), "tempo_restante_min": dados_bus["tempo_restante_min"]}
 
 if __name__ == "__main__":
     import uvicorn
