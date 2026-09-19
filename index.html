@@ -9,14 +9,12 @@
             --bg-color: #0d0d0d;
             --card-bg: linear-gradient(145deg, #181818, #111111);
             --orange-metallic: linear-gradient(135deg, #d35400 0%, #e67e22 50%, #b33900 100%);
-            --orange-accent: #d35400;
             --text-main: #f0f0f0;
             --text-muted: #888888;
             --border-color: #262626;
             --status-off: #2a2a2a;
             --status-on: #003811;
         }
-
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background-color: var(--bg-color);
@@ -30,7 +28,6 @@
             padding: 20px;
             box-sizing: border-box;
         }
-
         .card {
             background: var(--card-bg);
             border: 1px solid var(--border-color);
@@ -41,21 +38,18 @@
             max-width: 400px;
             text-align: center;
         }
-
-        h2 { 
-            color: #f39c12; 
+        h2 {
+            color: #f39c12;
             margin: 0 0 5px 0;
             font-size: 22px;
             letter-spacing: 1px;
             text-transform: uppercase;
         }
-
-        .sub-title { 
-            color: var(--text-muted); 
+        .sub-title {
+            color: var(--text-muted);
             font-size: 13px;
             margin-bottom: 20px;
         }
-
         .btn {
             width: 100%;
             padding: 16px;
@@ -70,24 +64,18 @@
             transition: all 0.2s ease-in-out;
             box-shadow: 0 4px 15px rgba(0,0,0,0.5);
         }
-
-        .btn-start { 
-            background: var(--orange-metallic); 
+        .btn-start {
+            background: var(--orange-metallic);
             color: #ffffff;
             border: 1px solid #e67e22;
         }
-
-        .btn-start:active {
-            transform: scale(0.98);
-        }
-
-        .btn-stop { 
-            background: linear-gradient(135deg, #7f8c8d, #34495e); 
-            color: white; 
-            display: none; 
+        .btn-start:active { transform: scale(0.98); }
+        .btn-stop {
+            background: linear-gradient(135deg, #7f8c8d, #34495e);
+            color: white;
+            display: none;
             border: 1px solid #7f8c8d;
         }
-        
         .info-box {
             background: #141414;
             border: 1px solid #222;
@@ -97,7 +85,6 @@
             font-size: 15px;
             text-align: left;
         }
-
         .info-row {
             display: flex;
             justify-content: space-between;
@@ -105,18 +92,12 @@
             border-bottom: 1px solid #1f1f1f;
             padding-bottom: 6px;
         }
-
         .info-row:last-child {
             border-bottom: none;
             margin-bottom: 0;
             padding-bottom: 0;
         }
-
-        .val-highlight {
-            color: #e67e22;
-            font-weight: bold;
-        }
-
+        .val-highlight { color: #e67e22; font-weight: bold; }
         .status {
             font-weight: 600;
             display: inline-block;
@@ -131,18 +112,14 @@
     </style>
 </head>
 <body>
-
     <div class="card">
         <h2>PAINEL DO MOTORISTA</h2>
         <p class="sub-title">Rota: Jucurutu ➔ UFRN Caicó</p>
-        
         <div>
             <span id="status" class="status status-off">Desconectado</span>
         </div>
-
-        <button id="btnStart" class="btn btn-start" onclick="iniciarRastreamento()">▶ Iniciar Viagem</button>
-        <button id="btnStop" class="btn btn-stop" onclick="pararRastreamento()">⏹ Parar Viagem</button>
-
+        <button id="btnStart" class="btn btn-start" onclick="iniciarRastreamento()">Iniciar Viagem</button>
+        <button id="btnStop" class="btn btn-stop" onclick="pararRastreamento()">Parar Viagem</button>
         <div class="info-box">
             <div class="info-row">
                 <span>Velocidade:</span>
@@ -161,26 +138,33 @@
             </div>
         </div>
     </div>
-
     <script>
         let watchId = null;
-        // Altere para o endereço do seu servidor executando o backend Python 
+        let ultimoPonto = null;
         const SERVIDOR_URL = "https://rastreador-vani-backend.onrender.com/atualizar_localizacao";
+
+        function haversineKm(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a =
+                Math.sin(dLat / 2) ** 2 +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) ** 2;
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
 
         function iniciarRastreamento() {
             if (!("geolocation" in navigator)) {
                 alert("Geolocalização não é suportada por este dispositivo.");
                 return;
             }
-
-            const options = {
+            ultimoPonto = null;
+            watchId = navigator.geolocation.watchPosition(sucessoGPS, erroGPS, {
                 enableHighAccuracy: true,
                 maximumAge: 0,
-                timeout: 10000
-            };
-
-            watchId = navigator.geolocation.watchPosition(sucessoGPS, erroGPS, options);
-
+                timeout: 15000
+            });
             document.getElementById("status").innerText = "Transmitindo GPS...";
             document.getElementById("status").className = "status status-on";
             document.getElementById("btnStart").style.display = "none";
@@ -192,7 +176,7 @@
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }
-
+            ultimoPonto = null;
             document.getElementById("status").innerText = "Desconectado";
             document.getElementById("status").className = "status status-off";
             document.getElementById("btnStart").style.display = "block";
@@ -202,22 +186,34 @@
         function sucessoGPS(position) {
             const lat = position.coords.latitude;
             const lon = position.coords.longitude;
-            
+            const agora = Date.now();
             let velocidadeKmh = 0;
-            if (position.coords.speed !== null && position.coords.speed > 0) {
-                velocidadeKmh = Math.round(position.coords.speed * 3.6);
+
+            if (position.coords.speed != null && position.coords.speed > 0) {
+                velocidadeKmh = position.coords.speed * 3.6;
             }
+
+            if (ultimoPonto) {
+                const segundos = (agora - ultimoPonto.t) / 1000;
+                const distKm = haversineKm(ultimoPonto.lat, ultimoPonto.lon, lat, lon);
+                if (segundos >= 3 && distKm > 0.015) {
+                    const calculada = (distKm / segundos) * 3600;
+                    if (calculada < 160) velocidadeKmh = Math.max(velocidadeKmh, calculada);
+                }
+            }
+
+            velocidadeKmh = Math.round(velocidadeKmh);
+            ultimoPonto = { lat, lon, t: agora };
 
             document.getElementById("lat").innerText = lat.toFixed(5);
             document.getElementById("lon").innerText = lon.toFixed(5);
             document.getElementById("velocidade").innerText = velocidadeKmh;
             document.getElementById("hora").innerText = new Date().toLocaleTimeString();
-
             enviarParaServidor(lat, lon, velocidadeKmh);
         }
 
         function erroGPS(err) {
-            console.warn(`ERRO (${err.code}): ${err.message}`);
+            console.warn("ERRO (" + err.code + "): " + err.message);
             document.getElementById("status").innerText = "Erro no GPS";
         }
 
